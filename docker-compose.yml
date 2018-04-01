@@ -1,0 +1,74 @@
+version: '3'
+
+volumes:
+  files:
+    driver: local
+  mysql:
+    driver: local
+  backup:
+    driver: local
+  redis:
+    driver: local
+
+services:
+   db:
+     container_name: oclouddb
+     image: mariadb:latest
+     restart: unless-stopped
+     volumes:
+       - mysql:/var/lib/mysql
+       - backup:/var/lib/backup
+     environment:
+       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+       MYSQL_DATABASE: ${MYSQL_DATABASE}
+       MYSQL_USER: ${MYSQL_USER}
+       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+   redis:
+     container_name: ocredis
+     image: webhippie/redis:latest
+     restart: always
+     environment:
+       - REDIS_DATABASES=1
+     healthcheck:
+       test: ["CMD", "/usr/bin/healthcheck"]
+       interval: 30s
+       timeout: 10s
+       retries: 5
+     volumes:
+       - redis:/var/lib/redis
+
+   owncloud:
+     container_name: ownloud
+     image: owncloud/server:latest
+     restart: always
+     depends_on:
+       - db
+       - redis
+     environment:
+       - OWNCLOUD_DOMAIN=${DOMAIN}
+       - OWNCLOUD_DB_TYPE=mysql
+       - OWNCLOUD_DB_NAME=${MYSQL_DATABASE}
+       - OWNCLOUD_DB_USERNAME=${MYSQL_USER}
+       - OWNCLOUD_DB_PASSWORD=${MYSQL_PASSWORD}
+       - OWNCLOUD_DB_HOST=oclouddb:3306
+       - OWNCLOUD_ADMIN_USERNAME=${ADMIN_USERNAME}
+       - OWNCLOUD_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+       - OWNCLOUD_UTF8MB4_ENABLED=true
+       - OWNCLOUD_REDIS_ENABLED=true
+       - OWNCLOUD_REDIS_HOST=redis
+       - LETSENCRYPT_HOST=${DOMAINS}
+       - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+       - VIRTUAL_HOST=${DOMAINS}
+     healthcheck:
+       test: ["CMD", "curl", "-f", "http://localhost/status.php"]
+       interval: 30s
+       timeout: 10s
+       retries: 5
+     volumes:
+       - files:/mnt/data
+
+networks:
+    default:
+       external:
+         name: ${NETWORK}
